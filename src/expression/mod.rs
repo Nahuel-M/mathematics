@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use crate::expression::simplify::*;
 
 use self::{constant::Constant, error::ExpressionError};
 
 pub mod constant;
 pub mod error;
-pub mod operation;
 pub mod display;
+pub mod macros;
+pub mod simplify;
+pub mod from_str;
 
 type Expr = Box<Expression>;
 #[derive(Debug, PartialEq, Clone)]
@@ -33,7 +36,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn parse_latex_formula(input: &String) -> Expression {
+    pub fn parse_latex_formula(_input: &str) -> Expression {
         Expression::Number(0.0)
     }
 
@@ -42,39 +45,49 @@ impl Expression {
         variables: Option<&HashMap<String, f64>>,
     ) -> Result<f64, ExpressionError> {
         use Expression::*;
-        match self {
-            Number(a) => Ok(*a),
-            Constant(a) => Ok(a.solve()),
+        Ok(match self {
+            Number(a) => *a,
+            Constant(a) => a.solve(),
             Variable(a) => variables
                 .ok_or(ExpressionError::MissingVariable(a.clone()))?
                 .get(a)
                 .cloned()
-                .ok_or(ExpressionError::MissingVariable(a.clone())),
-            Add(a, b) => Ok(a.solve(variables)? + b.solve(variables)?),
-            Subtract(a, b) => Ok(a.solve(variables)? - b.solve(variables)?),
-            Multiply(a, b) => Ok(a.solve(variables)? * b.solve(variables)?),
-            Divide(a, b) => Ok(a.solve(variables)? / b.solve(variables)?),
-            Power(a, b) => Ok(a.solve(variables)?.powf(b.solve(variables)?)),
-            Sqrt(a) => Ok(a.solve(variables)?.sqrt()),
-            Log(a, b) => Ok(a.solve(variables)?.log(b.solve(variables)?)),
-            Sin(a) => Ok(a.solve(variables)?.sin()),
-            ArcSin(a) => Ok(a.solve(variables)?.asin()),
-            Cos(a) => Ok(a.solve(variables)?.cos()),
-            ArcCos(a) => Ok(a.solve(variables)?.acos()),
-            Tan(a) => Ok(a.solve(variables)?.tan()),
-            ArcTan(a) => Ok(a.solve(variables)?.atan()),
-            Exp(a) => Ok(a.solve(variables)?.exp()),
-            Ln(a) => Ok(a.solve(variables)?.ln()),
-            Abs(a) => Ok(a.solve(variables)?.abs()),
-            Negate(a) => Ok(-a.solve(variables)?),
-        }
+                .ok_or(ExpressionError::MissingVariable(a.clone()))?,
+            Add(a, b) => a.solve(variables)? + b.solve(variables)?,
+            Subtract(a, b) => a.solve(variables)? - b.solve(variables)?,
+            Multiply(a, b) => a.solve(variables)? * b.solve(variables)?,
+            Divide(a, b) => a.solve(variables)? / b.solve(variables)?,
+            Power(a, b) => a.solve(variables)?.powf(b.solve(variables)?),
+            Sqrt(a) => a.solve(variables)?.sqrt(),
+            Log(a, b) => a.solve(variables)?.log(b.solve(variables)?),
+            Sin(a) => a.solve(variables)?.sin(),
+            ArcSin(a) => a.solve(variables)?.asin(),
+            Cos(a) => a.solve(variables)?.cos(),
+            ArcCos(a) => a.solve(variables)?.acos(),
+            Tan(a) => a.solve(variables)?.tan(),
+            ArcTan(a) => a.solve(variables)?.atan(),
+            Exp(a) => a.solve(variables)?.exp(),
+            Ln(a) => a.solve(variables)?.ln(),
+            Abs(a) => a.solve(variables)?.abs(),
+            Negate(a) => -a.solve(variables)?,
+        })
     }
 
     pub fn simplify(&self) -> Expression {
+        use Expression::*;
         match self {
-            Expression::Number(a) => self.clone(),
-            Expression::Constant(a) => self.clone(),
-            Expression::Variable(a) => self.clone(),
+            Number(_) => self.clone(),
+            Constant(_) => self.clone(),
+            Variable(_) => self.clone(),
+            Negate(a) => match a.simplify() {
+                Number(a) => Number(-a),
+                Negate(a) => *a, // Double negative
+                _ => Negate(a.clone()),
+            },
+            Add(a, b) => simplify_add(a, b),
+            Subtract(a, b) => simplify_subtract(a, b),
+            Multiply(a, b) => simplify_multiplication(a, b),
+            Divide(a, b) => simplify_division(a, b),
             _ => self.clone(),
         }
     }
@@ -82,42 +95,41 @@ impl Expression {
 
 #[cfg(test)]
 mod tests {
+    use crate::*;
     use super::*;
-    use Expression::*;
 
     #[test]
     fn test_parse_latex_formula() {
         let input = String::from("x^2 + 2x + 1");
-        let expected = Add(
-            Box::new(Power(
-                Box::new(Variable(String::from("x"))),
-                Box::new(Number(2.0)),
-            )),
-            Box::new(Add(
-                Box::new(Multiply(
-                    Box::new(Number(2.0)),
-                    Box::new(Variable(String::from("x"))),
-                )),
-                Box::new(Number(1.0)),
-            )),
+        let expected = add!(
+            power!(
+                variable!("x"),
+                number!(2.0),
+            ),
+            add!(
+                multiply!(
+                    number!(2.0),
+                    variable!("x")
+                ),
+                number!(1.0)
+            ),
         );
         assert_eq!(Expression::parse_latex_formula(&input), expected);
     }
     #[test]
     fn test_basic_addition() {
-        let input = Add(
-            Box::new(Expression::Number(1.0)),
-            Box::new(Expression::Number(1.0)),
+        let input = add!(
+            number!(1.0),
+            number!(1.0),
         );
         let expected = 2.0;
         assert_eq!(input.solve(None).unwrap(), expected);
     }
     #[test]
     fn test_variable() {
-        use Expression::Variable;
-        let input = Divide(
-            Box::new(Variable(String::from("x"))),
-            Box::new(Expression::Number(2.0)),
+        let input = divide!(
+            variable!("x"),
+            number!(2.0),
         );
         let mut variables = HashMap::new();
         variables.insert(String::from("x"), 2.0);
