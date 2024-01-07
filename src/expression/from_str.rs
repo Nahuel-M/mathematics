@@ -5,16 +5,18 @@ use nom::character::complete::multispace0;
 use nom::combinator::map;
 use nom::error::{Error, ParseError};
 use nom::number::complete::double;
-use nom::sequence::{delimited, tuple};
+use nom::sequence::{delimited, preceded, tuple};
 
 use Expression::*;
 
-use crate::{add, divide, multiply, number, power, subtract, variable};
+use crate::{add, divide, multiply, power, negate, invert};
 use crate::expression::constant::Constant::*;
 use crate::expression::Expression;
+use crate::expression::from_str::singletons::singletons;
 use crate::expression::from_str::trigonometry::trigonometry;
 
 mod trigonometry;
+mod singletons;
 
 impl Expression {
     pub fn from_str(input: &str) -> Result<Expression, nom::Err<Error<&str>>> {
@@ -26,6 +28,7 @@ fn singleton(input: &str) -> IResult<&str, Expression> {
     alt((
         bracketed,
         trigonometry,
+        singletons,
         constant,
         number,
         variable,
@@ -52,25 +55,23 @@ fn higher_than_add(input: &str) -> IResult<&str, Expression> {
     ))(input)
 }
 
-fn expression(input: &str) -> IResult<&str, Expression> {
+pub(crate) fn expression(input: &str) -> IResult<&str, Expression> {
     let (mut remaining_input, mut expression) = singleton(input)?;
     if remaining_input.is_empty() {
         return Ok((remaining_input, expression));
     }
 
     while let Ok((input, (operation, next_expression))) = alt((
-        tuple((ws(tag("+")), higher_than_add)),
-        tuple((ws(tag("-")), higher_than_add)),
-        tuple((ws(tag("*")), higher_than_multiplicative)),
-        tuple((ws(tag("/")), higher_than_multiplicative)),
+        tuple((ws(alt((tag("+"), tag("-")))), higher_than_add)),
+        tuple((ws(alt((tag("*"), tag("/")))), higher_than_multiplicative)),
         tuple((ws(tag("^")), higher_than_power)),
     ))(remaining_input) {
         remaining_input = input;
         expression = match operation {
             "+" => add!(expression, next_expression),
-            "-" => subtract!(expression, next_expression),
+            "-" => add!(expression, negate!(next_expression)),
             "*" => multiply!(expression, next_expression),
-            "/" => divide!(expression, next_expression),
+            "/" => multiply!(expression, invert!(next_expression)),
             "^" => power!(expression, next_expression),
             _ => unreachable!()
         };
@@ -92,7 +93,7 @@ fn multiplicative(input: &str) -> IResult<&str, Expression> {
         remaining_input = input;
         expression = match operation {
             "*" => multiply!(expression, next_expression),
-            "/" => divide!(expression, next_expression),
+            "/" => multiply!(expression, invert!(next_expression)),
             "^" => power!(expression, next_expression),
             _ => unreachable!()
         };
@@ -105,7 +106,7 @@ fn power(input: &str) -> IResult<&str, Expression> {
     if remaining_input.is_empty() {
         return Ok((remaining_input, expression));
     }
-    while let Ok((input, (operation, next_expression))) = tuple((ws(tag("^")), higher_than_power))(remaining_input) {
+    while let Ok((input, next_expression)) = preceded(ws(tag("^")), higher_than_power)(remaining_input) {
         remaining_input = input;
         expression =  power!(expression, next_expression);
     }
@@ -141,6 +142,7 @@ pub fn ws<'a, F, O, E: ParseError<&'a str>>(
 
 #[cfg(test)]
 mod tests {
+    use crate::{add, divide, multiply, number, power, negate, variable};
     use super::*;
 
     #[test]
@@ -161,8 +163,8 @@ mod tests {
         assert_eq!(expression("1 + 2"), Ok(("", add!(number!(1.0), number!(2.0)))));
         assert_eq!(expression("1 + 2 + 3"), Ok(("", add!(add!(number!(1.0), number!(2.0)),number!(3.0)))));
         assert_eq!(expression("1 + 2 + 3 + 4"), Ok(("", add!(add!(add!(number!(1.0), number!(2.0)), number!(3.0)),number!(4.0)))));
-        assert_eq!(expression("1 + 2 - 3"), Ok(("", subtract!(add!(number!(1.0), number!(2.0)), number!(3.0)))));
-        assert_eq!(expression("1 - 2 + 3"), Ok(("", add!(subtract!(number!(1.0), number!(2.0)), number!(3.0)))));
+        assert_eq!(expression("1 + 2 - 3"), Ok(("", add!(add!(number!(1.0), number!(2.0)), negate!(number!(3.0))))));
+        assert_eq!(expression("1 - 2 + 3"), Ok(("", add!(add!(number!(1.0), negate!(number!(2.0))), number!(3.0)))));
     }
 
     #[test]
@@ -170,8 +172,8 @@ mod tests {
         assert_eq!(expression("1 * 2"), Ok(("", multiply!(number!(1.0), number!(2.0)))));
         assert_eq!(expression("1 * 2 * 3"), Ok(("", multiply!(multiply!(number!(1.0), number!(2.0)), number!(3.0)))));
         assert_eq!(expression("1 * 2 * 3 * 4"), Ok(("", multiply!(multiply!(multiply!(number!(1.0), number!(2.0)), number!(3.0)), number!(4.0)))));
-        assert_eq!(expression("1 * 2 / 3"), Ok(("", divide!(multiply!(number!(1.0), number!(2.0)), number!(3.0)))));
-        assert_eq!(expression("1 / 2 * 3"), Ok(("", multiply!(divide!(number!(1.0), number!(2.0)), number!(3.0)))));
+        assert_eq!(expression("1 * 2 / 3"), Ok(("", multiply!(multiply!(number!(1.0), number!(2.0)), invert!(number!(3.0))))));
+        assert_eq!(expression("1 / 2 * 3"), Ok(("", multiply!(multiply!(number!(1.0), invert!(number!(2.0))), number!(3.0)))));
     }
 
     #[test]
@@ -179,8 +181,8 @@ mod tests {
         assert_eq!(expression("1 + 2 * 3"), Ok(("", add!(number!(1.0), multiply!(number!(2.0), number!(3.0))))));
         assert_eq!(expression("1 * 2 + 3"), Ok(("", add!(multiply!(number!(1.0), number!(2.0)), number!(3.0)))));
         assert_eq!(expression("1 * 2 + 3 * 4"), Ok(("", add!(multiply!(number!(1.0), number!(2.0)), multiply!(number!(3.0), number!(4.0))))));
-        assert_eq!(expression("1 + 2 / 3"), Ok(("", add!(number!(1.0), divide!(number!(2.0), number!(3.0))))));
-        assert_eq!(expression("1 / 2 + 3"), Ok(("", add!(divide!(number!(1.0), number!(2.0)), number!(3.0)))));
+        assert_eq!(expression("1 + 2 / 3"), Ok(("", add!(number!(1.0), multiply!(number!(2.0), invert!(number!(3.0)))))));
+        assert_eq!(expression("1 / 2 + 3"), Ok(("", add!(multiply!(number!(1.0), invert!(number!(2.0))), number!(3.0)))));
     }
 
     #[test]
@@ -194,6 +196,6 @@ mod tests {
 
     #[test]
     fn complex_stress() {
-        assert_eq!(expression("A * (E_0/rho_0)^(1/5) * t^(2/5)"), Ok(("", multiply!(multiply!(variable!("A"), power!(divide!(variable!("E_0"), variable!("rho_0")), divide!(number!(1.0), number!(5.0)))), power!(variable!("t"), divide!(number!(2.0), number!(5.0)))))));
+        assert_eq!(expression("A * (E_0/rho_0)^(1/5) * t^(2/5)"), Ok(("", multiply!(multiply!(variable!("A"), power!(multiply!(variable!("E_0"), invert!(variable!("rho_0"))), multiply!(number!(1.0), invert!(number!(5.0))))), power!(variable!("t"), multiply!(number!(2.0), invert!(number!(5.0))))))));
     }
 }

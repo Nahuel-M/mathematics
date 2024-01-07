@@ -8,28 +8,21 @@ macro_rules! variable {
 #[macro_export]
 macro_rules! number {
     ($expression:expr) => {
-        Expression::Number($expression)
+        crate::expression::Expression::Number($expression)
     };
 }
 
 #[macro_export]
 macro_rules! add {
-    ($expression1:expr, $expression2:expr $(,)?) => {
-        crate::expression::Expression::Add(Box::new($expression1), Box::new($expression2))
-    };
-}
-
-#[macro_export]
-macro_rules! subtract {
-    ($expression1:expr, $expression2:expr $(,)?) => {
-        Expression::Subtract(Box::new($expression1), Box::new($expression2))
+    ($($expression:expr),+ $(,)?) => {
+        crate::expression::Expression::Add(crate::expression::add::Add{children: vec![$($expression),+]})
     };
 }
 
 #[macro_export]
 macro_rules! multiply {
     ($expression1:expr, $expression2:expr $(,)?) => {
-        Expression::Multiply(Box::new($expression1), Box::new($expression2))
+        crate::expression::Expression::Multiply(crate::expression::multiply::Multiply{left: Box::new($expression1), right: Box::new($expression2)})
     };
 }
 
@@ -50,8 +43,15 @@ macro_rules! power {
 #[macro_export]
 macro_rules! negate {
     ($expression:expr) => {
-        Expression::Negate(Box::new($expression))
+        Expression::Negate(crate::expression::Negate{inner: Box::new($expression)})
     };
+}
+
+#[macro_export]
+macro_rules! invert {
+    ($expression:expr) => {
+        Expression::Invert((crate::expression::Invert{inner: Box::new($expression)}))
+    }
 }
 
 #[macro_export]

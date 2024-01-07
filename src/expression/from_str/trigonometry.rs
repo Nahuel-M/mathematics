@@ -4,7 +4,7 @@ use nom::IResult;
 use nom::sequence::tuple;
 
 use crate::expression::Expression;
-use crate::expression::from_str::expression;
+use crate::expression::from_str::{expression, ws};
 
 pub fn trigonometry(input: &str) -> IResult<&str, Expression> {
     let (input, (trig, _, inside, _)) = tuple((
@@ -23,7 +23,7 @@ pub fn trigonometry(input: &str) -> IResult<&str, Expression> {
             tag("tan^-1"),
         )),
         tag("("),
-        expression,
+        ws(expression),
         tag(")")
     ))(input)?;
 

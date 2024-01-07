@@ -1,5 +1,6 @@
 pub mod expression;
-use expression::Expression;
+pub mod equation;
+pub mod operation;
 
 fn main() {
     println!("Hello, world!");
