@@ -1,4 +1,4 @@
-use crate::{expression::Expression, number, multiply, negate, power, divide, add, sqrt, cos, sin, tan, arccos, arcsin, arctan};
+use crate::{expression::Expression, num, mul, neg, pow, div, add, sqrt, cos, sin, tan, acos, asin, atan};
 use crate::expression::add::Add;
 use crate::expression::multiply::Multiply;
 

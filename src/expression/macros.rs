@@ -1,56 +1,56 @@
 #[macro_export]
-macro_rules! variable {
+macro_rules! var {
     ($expression:expr) => {
-        Expression::Variable(String::from($expression))
+        $crate::expression::Expression::Variable(String::from($expression))
     };
 }
 
 #[macro_export]
-macro_rules! number {
+macro_rules! num {
     ($expression:expr) => {
-        crate::expression::Expression::Number($expression)
+        $crate::expression::Expression::Number($crate::expression::number::Number($expression as f64))
     };
 }
 
 #[macro_export]
 macro_rules! add {
     ($($expression:expr),+ $(,)?) => {
-        crate::expression::Expression::Add(crate::expression::add::Add{children: vec![$($expression),+]})
+        $crate::expression::Expression::Add($crate::expression::add::Add( vec![$($expression),+]))
     };
 }
 
 #[macro_export]
-macro_rules! multiply {
-    ($expression1:expr, $expression2:expr $(,)?) => {
-        crate::expression::Expression::Multiply(crate::expression::multiply::Multiply{left: Box::new($expression1), right: Box::new($expression2)})
+macro_rules! mul {
+    ($($expression:expr),+ $(,)?) => {
+        $crate::expression::Expression::Multiply($crate::expression::multiply::Multiply( vec![$($expression),+]))
     };
 }
 
 #[macro_export]
-macro_rules! divide {
+macro_rules! div {
     ($expression1:expr, $expression2:expr $(,)?) => {
         Expression::Divide(Box::new($expression1), Box::new($expression2))
     };
 }
 
 #[macro_export]
-macro_rules! power {
+macro_rules! pow {
     ($expression1:expr, $expression2:expr $(,)?) => {
         Expression::Power(Box::new($expression1), Box::new($expression2))
     };
 }
 
 #[macro_export]
-macro_rules! negate {
+macro_rules! neg {
     ($expression:expr) => {
-        Expression::Negate(crate::expression::Negate{inner: Box::new($expression)})
+        Expression::Negate($crate::expression::Negate(Box::new($expression)))
     };
 }
 
 #[macro_export]
-macro_rules! invert {
+macro_rules! inv {
     ($expression:expr) => {
-        Expression::Invert((crate::expression::Invert{inner: Box::new($expression)}))
+        Expression::Invert(($crate::expression::Invert(Box::new($expression))))
     }
 }
 
@@ -111,21 +111,21 @@ macro_rules! tan {
 }
 
 #[macro_export]
-macro_rules! arcsin {
+macro_rules! asin {
     ($expression:expr) => {
         Expression::ArcSin(Box::new($expression))
     };
 }
 
 #[macro_export]
-macro_rules! arccos {
+macro_rules! acos {
     ($expression:expr) => {
         Expression::ArcCos(Box::new($expression))
     };
 }
 
 #[macro_export]
-macro_rules! arctan {
+macro_rules! atan {
     ($expression:expr) => {
         Expression::ArcTan(Box::new($expression))
     };

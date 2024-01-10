@@ -1,10 +1,10 @@
-use crate::expression::simplify::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use crate::expression::add::Add;
 use crate::expression::invert::Invert;
 use crate::expression::multiply::Multiply;
 use crate::expression::negate::Negate;
+use crate::expression::number::Number;
 
 use self::{constant::Constant, error::ExpressionError};
 pub mod constant;
@@ -19,22 +19,22 @@ mod negate;
 mod multiply;
 mod invert;
 mod isolate_variable;
+pub mod number;
 
 trait Operand: Display + Clone + PartialEq{
     fn solve(&self, variables: Option<&HashMap<String, f64>>) -> Result<f64, ExpressionError>;
     fn operand_count(&self) -> usize;
-
-    fn children(&self) -> impl Iterator<Item=&Expression>;
+    fn children(&self) -> Vec<&Expression>;
     fn simplify(&self) -> Expression;
 }
 
 type Expr = Box<Expression>;
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
     /// Known mathematical constants, Like pi, e, etc
     Constant(Constant),
     /// A 64bit floating point number
-    Number(f64),
+    Number(Number),
     /// An unresolved variable, like x
     Variable(String),
     Add(Add),
@@ -59,7 +59,7 @@ impl Expression {
     pub fn solve(&self, variables: Option<&HashMap<String, f64>>) -> Result<f64, ExpressionError> {
         use Expression::*;
         Ok(match self {
-            Number(a) => *a,
+            Number(a) => a.solve(variables)?,
             Constant(a) => a.solve(),
             Variable(a) => *variables
                 .ok_or(ExpressionError::MissingVariable(a.clone()))?
@@ -120,15 +120,12 @@ impl Expression {
         use Expression::*;
         match self {
             Constant(_) |
-            Number(_)
-                => false,
-            Variable(name)
-                => name == variable,
-            Add(add) => add.left.contains_variable(variable) || add.right.contains_variable(variable),
-            Multiply(multiply) => multiply.left.contains_variable(variable) || multiply.right.contains_variable(variable),
+            Number(_) => false,
+            Variable(name) => name == variable,
+            Add(add) => add.0.iter().any(|child| child.contains_variable(variable)),
+            Multiply(multiply) => multiply.0.iter().any(|child| child.contains_variable(variable)),
             Power(left, right) |
-            Log(left, right)
-                => left.contains_variable(variable) || right.contains_variable(variable),
+            Log(left, right) => left.contains_variable(variable) || right.contains_variable(variable),
             Sqrt(inner) |
             Sin(inner) |
             ArcSin(inner) |
@@ -138,8 +135,8 @@ impl Expression {
             ArcTan(inner) |
             Ln(inner) |
             Abs(inner) => inner.contains_variable(variable),
-            Negate(negate) => negate.inner.contains_variable(variable),
-            Invert(invert) => invert.inner.contains_variable(variable),
+            Negate(negate) => negate.0.contains_variable(variable),
+            Invert(invert) => invert.0.contains_variable(variable),
         }
     }
 }
@@ -150,13 +147,13 @@ mod tests {
     use crate::*;
     #[test]
     fn test_basic_addition() {
-        let input = add!(number!(1.0), number!(1.0),);
+        let input = add!(num!(1.0), num!(1.0),);
         let expected = 2.0;
         assert_eq!(input.solve(None).unwrap(), expected);
     }
     #[test]
     fn test_variable() {
-        let input = multiply!(variable!("x"), invert!(number!(2.0)));
+        let input = mul!(var!("x"), inv!(num!(2.0)));
         let mut variables = HashMap::new();
         variables.insert(String::from("x"), 2.0);
         let expected = 1.0;

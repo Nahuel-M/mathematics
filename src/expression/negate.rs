@@ -1,53 +1,43 @@
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::iter;
 use crate::expression::error::ExpressionError;
-use crate::expression::{Expression, Operand};
+use crate::expression::{Expression, number, Operand};
 use crate::expression::display::parenthesize_if_of_type;
-use crate::{add, negate, number};
-use crate::expression::add::Add;
+use crate::{add, neg, num};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Negate{
-    pub inner: Box<Expression>
-}
+
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct Negate(pub Box<Expression>);
 
 impl Operand for Negate{
     fn solve(&self, variables: Option<&HashMap<String, f64>>) -> Result<f64, ExpressionError> {
-        Ok(-self.inner.solve(variables)?)
+        Ok(-self.0.solve(variables)?)
     }
     fn operand_count(&self) -> usize {
         1
     }
 
-    fn children(&self) -> impl Iterator<Item=&Expression> {
-        iter::once(&*self.inner)
+    fn children(&self) -> Vec<&Expression> {
+        vec![self.0.borrow()]
     }
 
     fn simplify(&self) -> Expression {
-        use crate::expression::Expression as Exp;
-        match self.inner.simplify() {
-            Exp::Number(a) => number!(-a),
-            Exp::Add(Add{left, right}) => simplify_negated_add(&*left, &*right),
-            Exp::Negate(a) => *a.inner, // Double negative
+        use crate::expression::Expression::*;
+        match self.0.simplify() {
+            Number(number::Number(a)) => num!(-a),
+            Negate(a) => *a.0, // Double negative
             a => a,
         }
     }
 }
 
-fn simplify_negated_add(left: &Expression, right: &Expression) -> Expression{
-    if let Expression::Negate(left) = left{
-        return add!(*left.inner.clone(), negate!(right.clone())); // -(-a + b) = a - b
-    } else if let Expression::Negate(right) = right{
-        return add!(*right.inner.clone(), negate!(left.clone())); // -(a - b) = b - a
-    }
-    negate!(add!(left.clone(), right.clone()))
-}
 
 impl Display for Negate{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Expression::*;
-        let a: String = parenthesize_if_of_type!(*self.inner, Add(..) | Multiply(..) | Power(..) | Negate(..));
+        let a: String = parenthesize_if_of_type!(*self.0, Add(..) | Multiply(..) | Power(..) | Negate(..));
         write!(f, "-{a}")
     }
 }

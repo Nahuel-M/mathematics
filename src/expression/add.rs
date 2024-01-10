@@ -1,110 +1,143 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::iter;
-use crate::expression::error::ExpressionError;
-use crate::expression::{Expression, Operand};
+
+use itertools::Itertools;
+
+use crate::{mul, num};
+use crate::expression::{add, Expression, multiply, negate, number, Operand};
 use crate::expression::display::parenthesize_if_of_type;
-use crate::{add, multiply, number};
-use crate::expression::multiply::Multiply;
+use crate::expression::error::ExpressionError;
+use crate::utils::insert_or_add::InsertOrAdd;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Add{
-    children: Vec<Expression>
-}
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct Add(pub Vec<Expression>);
 
-impl Operand for Add{
+impl Operand for Add {
     fn solve(&self, variables: Option<&HashMap<String, f64>>) -> Result<f64, ExpressionError> {
-        let results: Result<Vec<f64>, _> = self.children.iter()
+        let results: Result<Vec<f64>, _> = self.0.iter()
             .map(|child| child.solve(variables))
             .collect();
         Ok(results?.iter().sum())
     }
 
-    fn operand_count(&self) -> usize{
+    fn operand_count(&self) -> usize {
         2
     }
 
-    fn children(&self) -> impl Iterator<Item = &Expression> {
-        self.children.iter()
+    fn children(&self) -> Vec<&Expression> {
+        self.0.iter().collect()
     }
 
     fn simplify(&self) -> Expression {
+        let mut number_sum: f64 = 0.0;
+        let mut new_children: Vec<Expression> = Vec::new();
         use Expression::*;
-        let mut children: Vec<Expression> = self.children.iter()
-            .map(|child| child.simplify())
+        let children: Vec<Expression> = self.0.iter()
+            .flat_map(|child| {
+                match child.simplify(){
+                    Add(add::Add(children)) => children,
+                    other => vec![other]
+                }})
             .collect();
 
-        let number_sum = children
-            .iter()
-            .filter_map(|child| match child{
-                Number(a) => Some(*a),
-                _ => None,
-            })
-            .sum();
+        let mut additions: HashMap<Expression, f64> = HashMap::new();
+        for child in children {
+            match &child {
+                Number(number::Number(num)) => number_sum += num,
+                Negate(negate::Negate(negate)) => additions.insert_or_add(*negate.clone(), -1.0),
+                Multiply(multiply::Multiply(children)) => {
+                    let numeric_multiple = children.iter().find(|child| matches!(child, Number(..)));
+                    if let Some(Number(number::Number(num))) = numeric_multiple {
+                        let remainder = children.iter().filter(|child| !matches!(child, Number(..))).cloned().collect_vec();
+                        additions.insert_or_add(Multiply(multiply::Multiply(remainder)), *num);
+                    } else {
+                        additions.insert_or_add(child, 1.0);
+                    }
+                }
+                _ => additions.insert_or_add(child, 1.0)
+            }
+        }
+        for (addition, count) in additions.into_iter(){
+            if count == 1.{
+                new_children.push(addition);
+            } else if count != 0.{
+                new_children.push(mul!(num!(count), addition))
+            }
+        }
 
-        children.retain(|child| !matches!(child, Number(_)));
+        if number_sum != 0.0 {
+            new_children.push(num!(number_sum));
+        }
 
+        if new_children.len() == 1{
+            return new_children[0].clone();
+        }
 
-        return add!(self)
-        // let a = &*self.left;
-        // let b = &*self.right;
-        // use Expression::*;
-        // match (a.simplify(), b.simplify()) {
-        //     (Number(a), Number(b)) => number!(a + b),
-        //     (a, Number(b)) if b == 0.0 => a,
-        //     (Number(a), b) if a == 0.0 => b,
-        //     (a, Negate(b)) if a == *b.inner => { number!(0.0) },
-        //     (Negate(a), b) if *a.inner == b => { number!(0.0) },
-        //     (Multiply(a), Multiply(b)) => simplify_added_multiply(a, b),
-        //     (a, b) if a == b => multiply!(number!(2.0), a),
-        //     (a,b) => add!(a, b),
-        // }
+        Add(Self(new_children))
     }
 }
 
-fn simplify_added_multiply(left: Multiply, right: Multiply) -> Expression{
-    use Expression::*;
-    if left.left == right.left{
-        multiply!(*left.left, add!(*left.right, *right.right))
-    } else if left.left == right.right{
-        multiply!(*left.left, add!(*left.right, *right.left))
-    } else if left.right == right.left{
-        multiply!(*left.right, add!(*left.left, *right.right))
-    } else if left.right == right.right{
-        multiply!(*left.right, add!(*left.left, *right.left))
-    } else {
-        add!(Multiply(left), Multiply(right))
-    }
-}
 
-impl Display for Add{
+impl Display for Add {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Expression::*;
-        let a = parenthesize_if_of_type!(*self.left, Multiply(..) | Power(..) | Negate(..));
-        if let Negate(right) = *self.right.clone(){
-        let b = parenthesize_if_of_type!(*right.inner, Add(..) | Multiply(..) | Power(..) | Negate(..));
-            write!(f, "{a} - {b}")
-        } else {
-            let b = parenthesize_if_of_type!(*self.right, Multiply(..) | Power(..) | Negate(..));
-            write!(f, "{a} + {b}")
+        if self.0.is_empty() {
+            return write!(f, "0");
         }
+        write!(f, "{}", self.0[0])?;
+
+        if self.0.len() == 1 {
+            return Ok(());
+        }
+
+        for child in &self.0[1..] {
+            if let Negate(negate) = child {
+                write!(f, " - {}", parenthesize_if_of_type!(*negate.0, Add(..)))?;
+            } else if let Number(number) = *child{
+                if number < 0.0{
+                    write!(f, " - {}", -number)?;
+                    continue;
+                }
+                write!(f, " + {}", child)?;
+            }
+        }
+        Ok(())
     }
 }
 
 #[cfg(test)]
-pub mod test{
-    use crate::{add, number, negate};
+pub mod test {
+    use crate::{add, neg, num, var};
+
     use super::*;
 
     #[test]
-    fn test_display(){
-        let expr1 = add!(number!(1.0), number!(2.0));
-        assert_eq!(format!("{}", expr1), "1 + 2");
-        let expr2 = add!(add!(number!(1.0), number!(2.0)), number!(3.0));
-        assert_eq!(format!("{}", expr2), "1 + 2 + 3");
-        let expr3 = add!(number!(1.0), add!(number!(2.0), negate!(number!(3.0))));
-        assert_eq!(format!("{}", expr3), "1 + 2 - 3");
-        let expr4 = add!(number!(1.0), negate!(add!(number!(2.0), number!(3.0))));
-        assert_eq!(format!("{}", expr4), "1 - (2 + 3)");
+    fn test_display() {
+        let expr1 = add!(num!(1), num!(2));
+        assert_eq!(format!("{expr1}"), "1 + 2");
+        let expr2 = add!(num!(1), num!(2), num!(3));
+        assert_eq!(format!("{expr2}"), "1 + 2 + 3");
+        let expr3 = add!(num!(1), num!(2), neg!(num!(3)));
+        assert_eq!(format!("{expr3}"), "1 + 2 - 3");
+        let expr4 = add!(num!(1), neg!(add!(num!(2), num!(-3))));
+        assert_eq!(format!("{expr4}"), "1 - (2 - 3)");
+    }
+
+    #[test]
+    fn test_simplification(){
+        let expr1 = add!(add!(num!(1), var!("a")), var!("b"), num!(-2));
+        assert_eq!(expr1.simplify(), add!(var!("a"), var!("b"), num!(-1)));
+        let expr2 = add!(
+            mul!(num!(1), var!("a")),
+            var!("b"),
+            num!(-2),
+            num!(3),
+            mul!(num!(5), var!("a"))
+        );
+        assert_eq!(expr2.simplify(), add!(
+            mul!(num!(6), var!("a")),
+            var!("b"),
+            num!(1),
+        ));
     }
 }

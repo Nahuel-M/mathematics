@@ -1,26 +1,8 @@
 use crate::expression::Expression;
 use crate::operation::{ApplyOperation, Operation};
 
-enum OperationBranch<'a> {
-    One(OperationNode<'a>),
-    Two(OperationNode<'a>, OperationNode<'a>),
-}
 
-struct OperationNode<'a>{
-    operation: Child<'a>,
-    child: Option<Box<OperationBranch<'a>>>
-}
-
-struct Child<'a>{
-    expression: &'a Expression,
-    operation: Operation,
-}
-enum Children<'a>{
-    One(Child<'a>),
-    Two(Child<'a>, Child<'a>),
-}
-
-impl Expression {
+// impl Expression {
     // pub fn contains_variable(&self, variable: &str) -> bool {
     //     use Expression::*;
     //     match self {
@@ -194,4 +176,4 @@ impl Expression {
     //             )),
     //     }
     // }
-}
+// }
