@@ -25,6 +25,7 @@ impl Display for Equation{
 
 #[cfg(test)]
 mod tests{
+    use std::str::FromStr;
     use crate::equation::Equation;
     use crate::expression::Expression;
 
@@ -38,6 +39,5 @@ mod tests{
     #[test]
     fn example(){
         let equation = Equation::from_str("P = O + V * t").unwrap();
-
     }
 }

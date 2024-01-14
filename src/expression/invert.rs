@@ -1,12 +1,10 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::iter;
 use crate::expression::display::parenthesize_if_of_type;
-use crate::expression::{Expression, number, Operand};
+use crate::expression::{Expression, multiply, number, Operand};
 use crate::expression::error::ExpressionError;
-use crate::expression::multiply::Multiply;
-use crate::{inv, mul, num};
+use crate::{inv, num};
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct Invert(pub Box<Expression>);
@@ -34,6 +32,9 @@ impl Operand for Invert{
         use crate::expression::Expression::*;
         match self.0.simplify(){
             Invert(a) => *a.0,
+            Multiply(multiply::Multiply(children)) => {
+                Multiply(multiply::Multiply(children.iter().map(|child| inv!(child.clone()).simplify()).collect()))
+            },
             Number(number::Number(num)) => num!(1.0/num),
             a => inv!(a),
         }
@@ -44,10 +45,10 @@ impl Operand for Invert{
 #[cfg(test)]
 mod tests{
     use super::*;
-    use crate::{inv, mul, num};
+    use crate::{inv, num, var};
     #[test]
     fn inverted_multiply(){
-        let expression = inv!(mul!(num!(2.0), inv!(num!(3.0))));
-        assert_eq!(expression.simplify(), mul!(num!(3.0), inv!(num!(2.0))))
+        let expression = inv!(num!(2.0) * inv!(var!("a")));
+        assert_eq!(expression.simplify(), var!("a") * num!(0.5))
     }
 }

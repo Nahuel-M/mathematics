@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::ops::Mul;
-use itertools::Itertools;
-use nom::multi;
-use crate::expression::{add, Expression, invert, multiply, negate, number, Operand};
+use rustc_hash::FxHashMap;
+use crate::expression::{Expression, invert, multiply, number, Operand};
 use crate::expression::display::parenthesize_if_of_type;
 use crate::expression::error::ExpressionError;
-use crate::{mul, num, pow};
+use crate::{inv, num, pow};
 use crate::utils::insert_or_add::InsertOrAdd;
 
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
@@ -32,12 +30,12 @@ impl Operand for Multiply{
         let children: Vec<Expression> = self.0.iter()
             .flat_map(|child| {
                 match child.simplify(){
-                    Multiply(multiply::Multiply(children)) => children,
+                    Multiply(multiply::Multiply(children)) => children, // Merge inner multiplies
                     other => vec![other]
                 }})
             .collect();
 
-        let mut multiplications: HashMap<Expression, f64> = HashMap::new();
+        let mut multiplications: FxHashMap<Expression, f64> = FxHashMap::default();
         for child in children {
             match &child {
                 Number(number::Number(num)) => {
@@ -46,7 +44,7 @@ impl Operand for Multiply{
                     }
                     number_product *= num;
                 },
-                Invert(invert::Invert(negate)) => multiplications.insert_or_add(*negate.clone(), -1.0),
+                Invert(invert::Invert(invert)) => multiplications.insert_or_add(*invert.clone(), -1.0),
                 Power(ref base, ref exponent) => {
                     if let Number(number::Number(num)) = exponent.as_ref() {
                         multiplications.insert_or_add(*base.clone(), *num);
@@ -58,8 +56,10 @@ impl Operand for Multiply{
             }
         }
         for (multiplication, count) in multiplications.into_iter(){
-            if count == 1.{
+            if count == 1. {
                 new_children.push(multiplication);
+            } else if count == -1.{
+                new_children.push(inv!(multiplication));
             } else if count != 0.{
                 new_children.push(pow!(multiplication, num!(count)));
             }
@@ -74,6 +74,15 @@ impl Operand for Multiply{
         }
 
         Multiply(Self(new_children))
+    }
+}
+
+impl Multiply{
+    pub fn not_containing_variable(&self, variable: &str) -> Vec<Expression>{
+        self.0.iter()
+            .filter(|child| !child.contains_variable(variable))
+            .cloned()
+            .collect()
     }
 }
 
@@ -103,12 +112,14 @@ impl Display for Multiply{
 #[cfg(test)]
 mod tests{
     use super::*;
-    use crate::{inv, mul, num, var};
+    use crate::{num, var};
     #[test]
     fn test_simplification(){
-        let expression = mul!(num!(2.0), inv!(num!(3.0)));
+        let expression = num!(1.0) * var!("a");
+        assert_eq!(expression.simplify(), var!("a"));
+        let expression = num!(2.0) / num!(3.0);
         assert_eq!(expression.simplify(), num!(2.0/3.0));
-        let expression = mul!(num!(5), var!("a"), pow!(var!("a"), num!(5)), num!(4), inv!(var!("a")));
-        assert_eq!(expression.simplify(), mul!(pow!(var!("a"), num!(5)), num!(20)));
+        let expression = num!(5) * var!("a") * pow!(var!("a"), num!(5)) * num!(4) / var!("a");
+        assert_eq!(expression.simplify(), pow!(var!("a"), num!(5)) * num!(20));
     }
 }

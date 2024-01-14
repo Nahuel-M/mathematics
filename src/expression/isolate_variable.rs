@@ -10,9 +10,15 @@ impl Expression {
             Variable(name) if name == variable => Some(self.clone()),
             Variable(_) => None,
             Add(add) => {
-                if add.0.iter().filter(|child| child.contains_variable(variable)).count() == 1{
+                let (containing, non_containing): (Vec<_>, Vec<_>) = add.0.iter()
+                    .partition(|child| child.contains_variable(variable));
+
+                if containing.len() == 1{
                     return Some(self.clone());
                 }
+                // if containing.iter().all(|child| matches!(child, Multiply(..))){
+                //
+                // }
                 None
             }
             _ => {

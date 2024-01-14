@@ -1,11 +1,10 @@
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::iter;
 use crate::expression::error::ExpressionError;
 use crate::expression::{Expression, number, Operand};
 use crate::expression::display::parenthesize_if_of_type;
-use crate::{add, neg, num};
+use crate::num;
 
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]

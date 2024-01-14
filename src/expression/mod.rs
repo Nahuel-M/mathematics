@@ -12,7 +12,6 @@ pub mod display;
 pub mod error;
 pub mod from_str;
 pub mod macros;
-pub mod simplify;
 pub mod find_variable;
 mod add;
 mod negate;
@@ -20,6 +19,7 @@ mod multiply;
 mod invert;
 mod isolate_variable;
 pub mod number;
+mod operations;
 
 trait Operand: Display + Clone + PartialEq{
     fn solve(&self, variables: Option<&HashMap<String, f64>>) -> Result<f64, ExpressionError>;
@@ -154,9 +154,7 @@ mod tests {
     #[test]
     fn test_variable() {
         let input = mul!(var!("x"), inv!(num!(2.0)));
-        let mut variables = HashMap::new();
-        variables.insert(String::from("x"), 2.0);
-        let expected = 1.0;
-        assert_eq!(input.solve(Some(&variables)).unwrap(), expected);
+        let variables = HashMap::from([("x".to_string(), 2.0)] );
+        assert_eq!(input.solve(Some(&variables)).unwrap(), 1.0);
     }
 }

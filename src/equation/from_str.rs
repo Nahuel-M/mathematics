@@ -23,6 +23,7 @@ fn equation(input: &str) -> IResult<&str, Equation> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
     use crate::equation::Equation;
     use crate::expression::Expression;
 

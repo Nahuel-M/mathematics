@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+use rustc_hash::FxHashMap;
 
 use crate::{mul, num};
 use crate::expression::{add, Expression, multiply, negate, number, Operand};
@@ -40,7 +41,8 @@ impl Operand for Add {
                 }})
             .collect();
 
-        let mut additions: HashMap<Expression, f64> = HashMap::new();
+        let mut additions: FxHashMap<Expression, f64> = FxHashMap::default();
+
         for child in children {
             match &child {
                 Number(number::Number(num)) => number_sum += num,
@@ -49,7 +51,7 @@ impl Operand for Add {
                     let numeric_multiple = children.iter().find(|child| matches!(child, Number(..)));
                     if let Some(Number(number::Number(num))) = numeric_multiple {
                         let remainder = children.iter().filter(|child| !matches!(child, Number(..))).cloned().collect_vec();
-                        additions.insert_or_add(Multiply(multiply::Multiply(remainder)), *num);
+                        additions.insert_or_add(Multiply(multiply::Multiply(remainder)).simplify(), *num);
                     } else {
                         additions.insert_or_add(child, 1.0);
                     }
@@ -69,6 +71,7 @@ impl Operand for Add {
             new_children.push(num!(number_sum));
         }
 
+        // If there is only one value, there is no addition
         if new_children.len() == 1{
             return new_children[0].clone();
         }
@@ -113,31 +116,25 @@ pub mod test {
 
     #[test]
     fn test_display() {
-        let expr1 = add!(num!(1), num!(2));
+        let expr1 = num!(1) + num!(2);
         assert_eq!(format!("{expr1}"), "1 + 2");
-        let expr2 = add!(num!(1), num!(2), num!(3));
+        let expr2 = num!(1) + num!(2) + num!(3);
         assert_eq!(format!("{expr2}"), "1 + 2 + 3");
-        let expr3 = add!(num!(1), num!(2), neg!(num!(3)));
+        let expr3 = num!(1) + num!(2) + neg!(num!(3));
         assert_eq!(format!("{expr3}"), "1 + 2 - 3");
-        let expr4 = add!(num!(1), neg!(add!(num!(2), num!(-3))));
+        let expr4 = num!(1) + neg!(num!(2) + num!(-3));
         assert_eq!(format!("{expr4}"), "1 - (2 - 3)");
     }
 
     #[test]
     fn test_simplification(){
-        let expr1 = add!(add!(num!(1), var!("a")), var!("b"), num!(-2));
-        assert_eq!(expr1.simplify(), add!(var!("a"), var!("b"), num!(-1)));
-        let expr2 = add!(
-            mul!(num!(1), var!("a")),
-            var!("b"),
-            num!(-2),
-            num!(3),
-            mul!(num!(5), var!("a"))
-        );
-        assert_eq!(expr2.simplify(), add!(
-            mul!(num!(6), var!("a")),
-            var!("b"),
-            num!(1),
-        ));
+        let expression = add!(add!(num!(1), var!("a")), var!("b"), num!(-2));
+        assert_eq!(expression.simplify(), add!(var!("a"), var!("b"), num!(-1)));
+
+        let expression = num!(1) * var!("a") + num!(2) * var!("a");
+        assert_eq!(expression.simplify(), num!(3) * var!("a"));
+
+        let expression = num!(1) * var!("a") + var!("b") + num!(-2) + num!(3) + num!(5) * var!("a");
+        assert_eq!(expression.simplify(), num!(6) * var!("a") + var!("b") + num!(1));
     }
 }
